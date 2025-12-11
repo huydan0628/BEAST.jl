@@ -1,5 +1,8 @@
 module BEAST
 
+using GraphsColoring
+using OhMyThreads
+using ProgressMeter
 using Distributed
 using LinearAlgebra
 using SharedArrays
@@ -34,6 +37,7 @@ export planewave
 export RefSpace, numfunctions, coordtype, scalartype, assemblydata, geometry, refspace, valuetype
 export lagrangecxd0, lagrangec0d1, duallagrangec0d1, lagrangec0d2, unitfunctioncxd0, unitfunctionc0d1
 export duallagrangecxd0
+export lagrangec0, lagrangecx
 export lagdimension
 export restrict
 export raviartthomas, raowiltonglisson, positions
@@ -68,6 +72,11 @@ export HH3DSingleLayerNear
 export HH3DDoubleLayerNear
 export HH3DDoubleLayerTransposedNear
 export HH3DHyperSingularNear
+
+export HH2DSingleLayerNear
+export HH2DDoubleLayerNear
+export HH2DDoubleLayerTransposedNear
+export HH2DHyperSingularNear
 
 export NitscheHH3
 export MWSingleLayerTDIO
@@ -126,6 +135,7 @@ export PlaneWaveDirichlet
 export PlaneWaveNeumann
 
 struct NormalVector end
+struct TangentVector end
 
 using CompScienceMeshes
 using Combinatorics
@@ -133,6 +143,12 @@ using FFTW
 using SparseArrays
 
 function convolve end
+
+function progressbar(workload, verbose; color=:white, kwargs...)
+    return Progress(
+        workload; barglyphs=BarGlyphs("[=> ]"), color=color, enabled=verbose, kwargs...
+    )
+end
 
 include("utils/polynomial.jl")
 include("utils/specialfns.jl")
@@ -191,6 +207,11 @@ include("bases/stagedtimestep.jl")
 include("bases/timebasis.jl")
 include("bases/tensorbasis.jl")
 
+include("bases/composedbasis.jl")
+include("bases/local/localcomposedbasis.jl")
+
+include("coloring.jl")
+
 include("operator.jl")
 
 include("quadrature/strategies/quadstrat.jl")
@@ -218,6 +239,8 @@ include("identityop.jl")
 include("integralop.jl")
 include("dyadicop.jl")
 include("interpolation.jl")
+include("operators/projectors.jl")
+include("operators/theta.jl")
 
 include("quadrature/rules/momintegrals.jl")
 include("quadrature/doublenumints.jl")
@@ -276,6 +299,7 @@ include("helmholtz3d/wiltonints.jl")
 
 include("helmholtz2d/hh2dexc.jl")
 include("helmholtz2d/hh2dops.jl")
+include("helmholtz2d/hh2dnear.jl")
 include("helmholtz2d/helmholtz2d.jl")
 
 #suport for Volume Integral equation
@@ -304,11 +328,16 @@ include("solvers/solver.jl")
 include("solvers/lusolver.jl")
 include("solvers/itsolver.jl")
 include("solvers/gmres.jl")
+include("solvers/lu.jl")
+include("solvers/cholesky.jl")
 
 include("utils/plotlyglue.jl")
 
-
-
+include("composedoperators/composedoperator.jl")
+include("composedoperators/displacementmesh.jl")
+include("composedoperators/potentials.jl")
+include("composedoperators/trace.jl")
+include("composedoperators/analytic_excitation.jl")
 
 const x̂ = point(1, 0, 0)
 const ŷ = point(0, 1, 0)
@@ -318,6 +347,7 @@ export x̂, ŷ, ẑ
 const n = NormalVector()
 export n
 
+export TangentTrace
 #const to = TimerOutput()
 
 end # module

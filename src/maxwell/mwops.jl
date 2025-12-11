@@ -88,6 +88,9 @@ end
 
 MWDoubleLayer3DLoop(gamma) = MWDoubleLayer3DLoop(1.0, gamma) # For legacy purposes
 
+#MWDoubleLayer3DLoop does not support DoubleNumWiltonSauterQStrat 
+defaultquadstrat(op::MWDoubleLayer3DLoop, tfs::RTRefSpace, bfs::RTRefSpace) = DoubleNumSauterQstrat(6,7,5,5,4,3)
+
 ################################################################################
 #
 #  Kernel definitions
@@ -222,6 +225,13 @@ function gamma_wavenumber_handler(gamma, wavenumber)
         else
             gamma = im*wavenumber
         end
+    else
+        # gamma supplied, set wavenumber
+        if iszero(real(gamma))
+            wavenumber = imag(gamma)
+        else
+            wavenumber = -im*gamma
+        end
     end
 
     return gamma, wavenumber
@@ -249,7 +259,7 @@ end
 
 function operator_parameter_handler(alpha, gamma, wavenumber)
 
-gamma, wavenumber = gamma_wavenumber_handler(gamma, wavenumber)
+    gamma, wavenumber = gamma_wavenumber_handler(gamma, wavenumber)
 
     if alpha === nothing
         if isstatic(gamma) # static problem
@@ -259,5 +269,5 @@ gamma, wavenumber = gamma_wavenumber_handler(gamma, wavenumber)
         end
     end
 
-return alpha, gamma
+    return alpha, gamma
 end

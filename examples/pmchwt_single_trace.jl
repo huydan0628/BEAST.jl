@@ -1,7 +1,14 @@
 using BEAST
+using BEAST.BlockArrays
+using BEAST.NestedUnitRanges
+
 using CompScienceMeshes
+using LinearAlgebra
 using Makeitso
 using PlotlyJS
+using SparseArrays
+
+LinearAlgebra.BLAS.set_num_threads(8)
 
 @target geo (;h)->begin
 
@@ -118,32 +125,44 @@ end
     RUv = assemble(R, U, V)
     Auu = assemble(A, U, U)
 
-    matrices = (;Auu, RUv)
+    linmaps = (;Auu, RUv)
     vectors = (;bu)
-    return (;matrices, vectors)
+    return (;linmaps, vectors)
 end
 
 
-@target solution (discretization, spaces) -> begin
+@target matrix (discretization) -> begin
 
-    (;matrices, vectors) = discretization
-    (;Auu, RUv) = matrices
+    (;linmaps, vectors) = discretization
+    (;Auu, RUv) = linmaps
     (;bu) = vectors
 
-    (;U) = spaces
-
     MA = Matrix(Auu)
-    MR = Matrix(RUv)
-    vb = Vector(bu)
+    MR = sparse(RUv)
 
-    @show size(Auu)
-    @show size(RUv)
-    @show size(bu)
+    ax1 = axes(RUv,2)
+    ax2 = axes(RUv,2)
 
-    v = (MR' * MA * MR) \ (MR' * vb)
-    u = MR * v
-    u = BEAST.BlockArrays.BlockedVector(u, (
-        BEAST.NestedUnitRanges.nestedrange(U, 1, numfunctions),))
+    A = MR' * MA * MR
+    A = BEAST.BlockArrays.BlockedArray(A, (ax1, ax2) )
+    b = RUv' * bu
+
+    return (;A, b)
+end
+
+
+@target solution (discretization, spaces, matrix) -> begin
+
+    (;linmaps, vectors) = discretization
+    (;RUv) = linmaps
+    (;A, b) = matrix
+    (;U,V) = spaces
+
+    Ai = BEAST.lu(A)
+    v = Ai * b
+    u = RUv * v
+
+    v = BEAST.FEMFunction(v, V)
     u = BEAST.FEMFunction(u, U)
 
     return (;u)
@@ -190,7 +209,8 @@ end
 
 x = range(-2.0,2.0,length=150)
 z = range(-1.5,2.5,length=100)
-nf = make(nearfield; h=0.08, κ=2.0, x=x, z=z)
+make(matrix; h=0.08, κ=2.0, x, z)
+nf = make(nearfield; h=0.08, κ=2.0, x, z)
 
 Etot = sum(nf.E)
 Htot = sum(nf.H)
@@ -208,3 +228,80 @@ PlotlyJS.add_trace!(plt, hm2, row=1, col=2);
 PlotlyJS.add_trace!(plt, hm3, row=2, col=1);
 PlotlyJS.add_trace!(plt, hm4, row=2, col=2);
 display(plt)
+
+error()
+## Debugging
+
+# ds = make(discretization; h=0.08, κ=2.0)
+ds = make(discretization; h=0.15, κ=2.0)
+
+using LinearAlgebra
+using BEAST.LinearMaps
+using BEAST.BlockArrays
+using BEAST.BlockArrays.ArrayLayouts
+using SparseArrays
+
+(;linmaps, vectors) = ds
+(;Auu, RUv) = linmaps
+(;bu) = vectors
+
+MA1 = AbstractMatrix(Auu)
+MR1 = AbstractMatrix(RUv)
+# vb = AbstractArray(bu)
+
+MA2 = Matrix(Auu)
+MR2 = sparse(RUv)
+
+MulAB = ArrayLayouts.Mul(MA1, MR1)
+@which ArrayLayouts.materialize(MulAB)
+InstAB = ArrayLayouts.instantiate(MulAB)
+@which copy(InstAB)
+@which ArrayLayouts.mulreduce(InstAB)
+redAB = ArrayLayouts.mulreduce(InstAB)
+@which copy(redAB)
+simAB = similar(redAB)
+@which copyto!(simAB, redAB)
+
+M = redAB
+dest = simAB
+fct = ArrayLayouts._fill_copyto!(dest, M.C)
+@which muladd!(M.α, M.A, M.B, M.β, fct; Czero = M.Czero)
+error()
+
+@enter copyto!(simAB, redAB)
+
+@time MA2 * MR2
+@time MA1 * MR1
+
+axs1 = axes(Auu)
+axs2 = Tuple( blockedrange([sz[1] for sz in blocksizes(ax1)]) for ax1 in axs1 )
+
+T = ComplexF64
+Y1 = similar(Array{T}, axs1)
+Y2 = similar(Array{T}, axs2)
+
+@which LinearAlgebra.rmul!(Y1, true)
+@which LinearAlgebra.rmul!(Y2, true)
+
+@profview LinearAlgebra.rmul!(Y1, true)
+@profview LinearAlgebra.rmul!(Y2, true)
+
+lmap = Auu.maps[1].lmap
+P = getindex(axes(lmap,1), lmap.I)
+Q = getindex(axes(lmap,2), lmap.J)
+
+Y1IJ = view(Y1, P, Q)
+Y2IJ = view(Y2, P, Q)
+
+@which LinearAlgebra.rmul!(Y1IJ, true)
+@which LinearAlgebra.rmul!(Y2IJ, true)
+
+@profview LinearAlgebra.rmul!(Y1IJ, true)
+@profview LinearAlgebra.rmul!(Y2IJ, true)
+
+# error()
+@time LinearMaps._unsafe_mul!(Y1, Auu, false)
+@profview LinearMaps._unsafe_mul!(Y1, Auu, false)
+# @profview AbstractMatrix{T}(Auu)
+
+error()

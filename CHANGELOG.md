@@ -1,5 +1,23 @@
 # Changelog
 
+# New in 2.8.0
+- Improved support of for the Helmholtz equation.
+- Higher-order quasi-Helmholtz projectors.
+- Bourhis and Nedelec Theta operators.
+- Curl of Lagrange basis now based on GWP basis to support curl for any order of basis.
+- Direct solvers (Cholesky,LU) wrapped as LinearMap.
+- Better integration of GMRES from Krylov.jl
+
+# New in 2.7.3
+- Generic way of introducing potentials added.
+- Generic Trace operators of those potentials introduced.
+- Composed user defined operators can be constructed.
+More information can be found in the documentation.
+Corrected bugs:
+- Minus sign in the normalvector cross RT and ND space.
+- Construction of the duallagrangec0d1 space.
+- Quadstrat in the LinearCombinationOfOperators.
+
 # New in 2.7.2
 
 - GMRES from Krylov.jl wrapped as a LinearMap
